@@ -1,0 +1,112 @@
+#importing two libraries necessary
+import numpy as np
+import pandas as pd
+#creating a dataframe by the name of movies and credits and will read the csv file from there
+movies = pd.read_csv('tmdb_5000_movies.csv')
+credits = pd.read_csv('tmdb_5000_credits.csv')
+movies.head(1) #this will  show us only a single movie 1st one
+credits.head(1) # shows us the first row of credits dataframe
+#merging the two dataframes on the basis of title
+movies=movies.merge(credits,on='title')
+#now we will discard those columns which are not necessary
+movies = movies[['id','title','overview','genres','keywords','cast','crew']]
+movies.isnull().sum() #from here we got to know that in overview there are 3 columns/rows whose overview we dont knowb
+ #dropna is a module to remove the columns whose information is'nt given 
+movies.dropna(inplace=True)
+#checking for dupicate data
+movies.duplicated().sum()
+#is in a form of dictionary
+movies.iloc[0].genres
+#ast python library is converting string into list
+import ast
+ast.literal_eval('[{"id": 28, "name": "Action"}, {"id": 12, "name": "Adventure"}, {"id": 14, "name": "Fantasy"}, {"id": 878, "name": "Science Fiction"}]')
+#creating a helper function to convert string into a list
+def convert (obj) :
+    L = []
+    for i in ast.literal_eval(obj):
+        L.append(i['name'])
+    return L
+ movies['genres'] = movies['genres'].apply(convert)
+ movies['keywords'] = movies['keywords'].apply(convert)
+#showing only the first three names in the cast column
+
+def convert3 (obj) :
+    L = []
+    counter=0
+    for i in ast.literal_eval(obj):
+        if counter != 3:
+            L.append(i['name'])
+            counter += 1
+        else:
+                break
+    return L
+movies['cast'] = movies['cast'].apply(convert3)
+#needs that dictionary whose name job title is director and we will  extract that name (it is for crew)
+
+def fetch_director (obj) :
+    L = []
+    for i in ast.literal_eval(obj):
+        if i['job'] == 'Director':
+            L.append(i['name'])
+            break
+    return L
+movies['crew'] = movies['crew'].apply(fetch_director)
+ #overview wala column is a string we will covert it into a list
+movies['overview'] =  movies['overview'].apply(lambda x:x.split()) 
+#removing the spaces between the strings
+movies['genres'] = movies['genres'].apply(lambda x:[i.replace(" ","") for i in x])
+movies['overview'] = movies['overview'].apply(lambda x:[i.replace(" ","") for i in x])
+movies['cast'] = movies['cast'].apply(lambda x:[i.replace(" ","") for i in x])
+movies['crew'] = movies['crew'].apply(lambda x:[i.replace(" ","") for i in x])
+#creating tags to concatinate all the columns together
+movies['tags'] = movies['overview'] + movies['genres'] + movies['keywords'] + movies['cast'] + movies['crew']
+#creating a new dataframe
+new_df = movies[['id','title','tags']] 
+new_df
+new_df.head()
+#converting list into string
+new_df['tags'] = new_df['tags'].apply(lambda x:" ".join(x))
+#converting everything into  lowercase
+
+new_df['tags'] = new_df['tags'].apply(lambda x:x.lower())
+#text vectorization show similarity on the basis of tags
+from sklearn.feature_extraction.text import CountVectorizer
+cv = CountVectorizer(max_features = 5000,stop_words='english')
+#to explicitly convert into a numpy array
+cv.fit_transform(new_df['tags']).toarray()
+cv.fit_transform(new_df['tags']).toarray().shape
+#now here each movie has come into a vector form
+vectors = cv.fit_transform(new_df['tags']).toarray()
+#this is the first movie
+vectors[0]
+import nltk
+from nltk.stem.porter import PorterStemmer
+ps = PorterStemmer()
+#helper function to first convert a string into list and the keep stemming each word from it
+def stem (text):
+    y = []
+    
+    for i in text.split():
+        y.append(ps.stem(i))
+        
+        return " ".join(y)
+    
+ new_df['tags'] = new_df['tags'].apply(stem)
+from sklearn.metrics.pairwise import cosine_similarity
+# vectors ke beech ka distance calculate hoga
+similarity = cosine_similarity(vectors)
+#similar 5 movies
+sorted(list(enumerate(similarity[0])),reverse = True,key = lambda x:x[1])[1:6] #similarity matrice is an array of arrays and converted into list of tuples
+def recommend (movie):
+    movie_index = new_df[new_df['title'] == movie].index[0]
+    distances = similarity[movie_index]  #takes out the distances
+    #now we will sort these distances
+    movies_list = sorted(list(enumerate(distances)),reverse = True,key = lambda x:x[1])[1:6]
+    
+    for i in movies_list:
+        print(new_df.iloc[i[0]].title)
+    recommend('Avatar')
+import pickle
+pickle.dump(new_df,open('movies.pkl','wb'))
+pickle.dump(new_df.to_dict,open('movies.pkl','wb'))
+pickle.dump(similarity,open('smilarity.pkl','wb'))
